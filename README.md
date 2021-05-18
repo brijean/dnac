@@ -8,9 +8,9 @@
 usage: get_devicelist.py [-h] dnac dnac_user dnac_pw
 
 #positional arguments:
-#  dnac        FQDN or IP address of target controller.
-#  dnac_user   DNAC username
-#  dnac_pw     DNAC password
+ dnac        FQDN or IP address of target controller.
+ dnac_user   DNAC username
+ dnac_pw     DNAC password
 
 #optional arguments:
-#  -h, --help  show this help message and exit
+  -h, --help  show this help message and exit
