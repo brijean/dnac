@@ -46,10 +46,14 @@ def getAPNeighborDetails(dnac,apIPList):
      if len(apIPList) > 5 :
          time.sleep(13)
      sum_api_calls = sum_api_calls + 1
-     print("This is the:", sum_api_calls, "get\n")
+     print("Getting details for:", ip, "\n")
      response =  requests.get(url, headers=headers, verify=False ).json()
 
-     if type(response) is dict and 'error' in response:
+    # if type(response) is dict and ('error' in response or 'not have valid permissions' in response):
+     if 'message' in response:
+       print (response['message'])
+       return()
+     elif 'error' in response in response:
        print(response['error'])
        return()
      else:
