@@ -8,10 +8,9 @@ from dnac_config import process_args
 import sys
 
 
-def getAPList(dnac):
-   url = f"https://{dnac}/dna/intent/api/v1/network-device?family=Unified AP"
+def getDeviceCount(dnac):
+   url = f"https://{dnac}/dna/intent/api/v1/network-device/count"
    
-   apList =[]
    headers = {
        "Content-Type": "application/json",
        "Accept": "application/json",
@@ -19,10 +18,33 @@ def getAPList(dnac):
    }
    response =  requests.get(url, headers=headers, verify=False ).json()
 
-   #iterate through response to get list of ips
-   for item in response['response']:
-      apList.append({'hostname' : item['hostname'], 'ip' : item['managementIpAddress'], 'MAC Address' : item['macAddress'], 'WLC IP' : item['associatedWlcIp'], 'id' : item['id']})  
-   return(apList)
+   return(response['response'])
+
+   
+def getAPList(dnac, count):
+   apList =[]
+   to_go = count
+   start_pos = 1
+   api_record_limit = 500
+   while to_go > 0:
+     url = f"https://{dnac}/dna/intent/api/v1/network-device/{start_pos}/{api_record_limit}?"
+   
+     headers = {
+         "Content-Type": "application/json",
+         "Accept": "application/json",
+         "X-auth-Token": token,
+     }
+     response =  requests.get(url, headers=headers, verify=False ).json()
+
+     #iterate through response to get list of ips
+     for item in response['response']:
+        if item['family'] == "Unified AP":
+          apList.append({'hostname' : item['hostname'], 'ip' : item['managementIpAddress'], 'MAC Address' : item['macAddress'], 'WLC IP' : item['associatedWlcIp'], 'id' : item['id']})  
+     
+     to_go = count - api_record_limit
+     start_pos = start_pos + api_record_limit
+
+     return(apList)
 
 
 def getPhysicalTopology(dnac):
@@ -61,13 +83,6 @@ def merge_topology(input_table, topo_dict):
         merged_table[len(merged_table)-1]['neighbor_int'] = None   
   return(merged_table)
 
-        
-
-        
-
-
-  return()
-
 
 def print_csv(listOfDict, fName):
   csvColumns = listOfDict[0].keys()
@@ -87,8 +102,11 @@ if __name__ == "__main__":
    dnac_parameters = process_args(sys.argv)
    token = get_token(dnac_parameters)
    
+   #get # of devices in DNAC
+   device_count = getDeviceCount(dnac_parameters['host'])
+
    #get AP's and associated attributes
-   ap_table = getAPList(dnac_parameters['host'])
+   ap_table = getAPList(dnac_parameters['host'], device_count)
   
    #get physical topology
    topology = getPhysicalTopology(dnac_parameters['host'])
