@@ -26,7 +26,11 @@ def getAPList(dnac, count):
    to_go = count
    start_pos = 1
    api_record_limit = 500
+   print("Total Devices", count, "\n")
+   print("API Record Limit:", api_record_limit, "\n")
    while to_go > 0:
+     print ("Devices remaining:", to_go, "\n")
+     print ("Starting at postion", start_pos, "\n")
      url = f"https://{dnac}/dna/intent/api/v1/network-device/{start_pos}/{api_record_limit}?"
    
      headers = {
@@ -41,10 +45,10 @@ def getAPList(dnac, count):
         if item['family'] == "Unified AP":
           apList.append({'hostname' : item['hostname'], 'ip' : item['managementIpAddress'], 'MAC Address' : item['macAddress'], 'WLC IP' : item['associatedWlcIp'], 'id' : item['id']})  
      
-     to_go = count - api_record_limit
+     to_go = to_go - api_record_limit
      start_pos = start_pos + api_record_limit
 
-     return(apList)
+   return(apList)
 
 
 def getPhysicalTopology(dnac):
