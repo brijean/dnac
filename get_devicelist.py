@@ -26,11 +26,8 @@ def getAPList(dnac, count):
    to_go = count
    start_pos = 1
    api_record_limit = 500
-   print("Total Devices", count, "\n")
-   print("API Record Limit:", api_record_limit, "\n")
+
    while to_go > 0:
-     print ("Devices remaining:", to_go, "\n")
-     print ("Starting at postion", start_pos, "\n")
      url = f"https://{dnac}/dna/intent/api/v1/network-device/{start_pos}/{api_record_limit}?"
    
      headers = {
@@ -115,6 +112,7 @@ if __name__ == "__main__":
    #get physical topology
    topology = getPhysicalTopology(dnac_parameters['host'])
 
+   #add merge cdp neighbor information with ap_table
    ap_report = merge_topology(ap_table, topology)
 
    #output report
