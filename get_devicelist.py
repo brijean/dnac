@@ -8,10 +8,9 @@ from dnac_config import process_args
 import sys
 
 
-def getAPList(dnac):
-   url = f"https://{dnac}/dna/intent/api/v1/network-device?family=Unified AP"
+def getDeviceCount(dnac):
+   url = f"https://{dnac}/dna/intent/api/v1/network-device/count"
    
-   apList =[]
    headers = {
        "Content-Type": "application/json",
        "Accept": "application/json",
@@ -19,69 +18,77 @@ def getAPList(dnac):
    }
    response =  requests.get(url, headers=headers, verify=False ).json()
 
-   #iterate through response to get list of ips
-   for item in response['response']:
-      apList.append(item['managementIpAddress'])
+   return(response['response'])
+
+   
+def getAPList(dnac, count):
+   apList =[]
+   to_go = count
+   start_pos = 1
+   api_record_limit = 500
+
+   while to_go > 0:
+     url = f"https://{dnac}/dna/intent/api/v1/network-device/{start_pos}/{api_record_limit}?"
+   
+     headers = {
+         "Content-Type": "application/json",
+         "Accept": "application/json",
+         "X-auth-Token": token,
+     }
+     response =  requests.get(url, headers=headers, verify=False ).json()
+
+     #iterate through response to get list of ips
+     for item in response['response']:
+        if item['family'] == "Unified AP":
+          apList.append({'hostname' : item['hostname'], 'ip' : item['managementIpAddress'], 'MAC Address' : item['macAddress'], 'WLC IP' : item['associatedWlcIp'], 'id' : item['id']})  
+     
+     to_go = to_go - api_record_limit
+     start_pos = start_pos + api_record_limit
+
    return(apList)
 
 
-def getAPNeighborDetails(dnac,apIPList):
-   url = f"https://{dnac}/dna/intent/api/v1/device-enrichment-details"
+def getPhysicalTopology(dnac):
+   url = f"https://{dnac}/dna/intent/api/v1/topology/physical-topology"
    
    #initialize list to be returned
-   ap_neighbor_table = []
-   sum_api_calls = 0
-
-   for ip in apIPList:
-     headers = {
+     
+   headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
         "X-auth-Token": token,
-        "entity_type": "ip_address",
-        "entity_value": ip
      }
   
-     
-     #adding some sleep time to see if we can get around DNAC API Rate Limiting
-     if len(apIPList) > 5 :
-         time.sleep(13)
-     sum_api_calls = sum_api_calls + 1
-     print("This is the:", sum_api_calls, "get\n")
-     response =  requests.get(url, headers=headers, verify=False ).json()
+   response =  requests.get(url, headers=headers, verify=False ).json()
 
-     if type(response) is dict and 'error' in response:
-       print(response['error'])
-       return()
-     else:
-        device = (response[0]["deviceDetails"])
-     
-     #get relevant AP attribures
-     ap_neighbor_row = {'hostname': device['hostname'], 'IP Address': device['managementIpAddress'], 'MAC Address': device['macAddress'].lower(), 'WLC IP': device['associatedWlcIp']}
-     
-     #iterate through nodes and links tables to find CDP neighbor information
-     topo_dict = device['neighborTopology'][0]
-     for table_id, table_info in topo_dict.items():
-       if table_id == 'nodes':
-         for item in table_info:
-           if item['additionalInfo']['macAddress'] != None and item['additionalInfo']['macAddress'].lower() == ap_neighbor_row['MAC Address'].lower():
-              #found the AP's ID
-              ap_id = item['id']
-           if item['family'] == 'Switches and Hubs':
-              ap_neighbor_row['neighbor'] = item['name']
-              ap_neighbor_row['neighbor_ip'] = item['ip']
-              #found the cdp neighbor switch ip
-              switch_id = item['id']
-       elif table_id == 'links':
-         for item in table_info:
-            if item['target'] == switch_id and item['source'] == ap_id:
-               ap_neighbor_row['neighbor_int'] = item['targetInterfaceName']
-         ap_neighbor_table.append(ap_neighbor_row)
-   return(ap_neighbor_table)   
+   return(response['response'])   
+
+def merge_topology(input_table, topo_dict):
+  merged_table = []
+  for item in input_table:
+    merged_table.append(item)
+    neighbor_found = False
+    for link in topology['links']:
+      if link['source'] == item ['id']:
+        #found neighbor
+        neighbor_found = True
+        neighbor_id = link['target']
+        for node in topology['nodes']:
+          if node['id'] == neighbor_id:
+            merged_table[len(merged_table)-1]['neighbor'] = node['label']
+            merged_table[len(merged_table)-1]['neighbor_ip'] = node['ip']
+        merged_table[len(merged_table)-1]['neighbor_int'] = link['endPortName']      
+    if neighbor_found == False:
+        merged_table[len(merged_table)-1]['neighbor'] = None
+        merged_table[len(merged_table)-1]['neighbor_ip'] = None
+        merged_table[len(merged_table)-1]['neighbor_int'] = None   
+  return(merged_table)
+
 
 def print_csv(listOfDict, fName):
   csvColumns = listOfDict[0].keys()
   try:
-     with open(fName, 'w') as csvFile:
+     with open(fName, 'w', encoding='utf-8-sig') as csvFile:
         writer = csv.DictWriter(csvFile, fieldnames=csvColumns)
         writer.writeheader()
         for row in listOfDict:
@@ -96,11 +103,18 @@ if __name__ == "__main__":
    dnac_parameters = process_args(sys.argv)
    token = get_token(dnac_parameters)
    
-   #get target AP list for report
-   ap_list = getAPList(dnac_parameters['host'])
-   #run ap neighbor report on ap_list
-   ap_neighbor_report = getAPNeighborDetails(dnac_parameters['host'],ap_list)
+   #get # of devices in DNAC
+   device_count = getDeviceCount(dnac_parameters['host'])
+
+   #get AP's and associated attributes
+   ap_table = getAPList(dnac_parameters['host'], device_count)
+  
+   #get physical topology
+   topology = getPhysicalTopology(dnac_parameters['host'])
+
+   #add merge cdp neighbor information with ap_table
+   ap_report = merge_topology(ap_table, topology)
 
    #output report
    report_name = 'ap_neighbor_report.csv'
-   print_csv(ap_neighbor_report, 'ap_neighbor_report.csv')
+   print_csv(ap_report, 'ap_neighbor_report.csv')
